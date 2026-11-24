@@ -38,6 +38,7 @@ M5Stack Cardputer ADV 上的 MP3 播放器与中文网络电台，一套固件�
 - 断流自动重连，连接失败按指数退避重试，不卡界面
 
 ### 系统
+- **定时关闭（睡眠定时器）**：按 `T` 选择 15–150 分钟，到期停止播放、断开 WiFi 并深度睡眠（约 2–5 mA），按 G0 键唤醒
 
 - 不依赖 PSRAM（Cardputer ADV 为 ESP32-S3FN8，8 MB Flash、无 PSRAM），所有缓冲都在内部 RAM 内精心分配
 - 状态页（`I`）实时显示内部剩余内存、最低水位、最大连续块、显示 / 解码 / 取流缓冲位置、WiFi 与运行时长
@@ -61,17 +62,17 @@ M5Stack Cardputer ADV 上的 MP3 播放器与中文网络电台，一套固件�
 
 | 文件 | 用途 | 烧录地址 |
 |---|---|---|
-| `cardradio-1.0-merged.bin` | **推荐**。完整镜像，含 bootloader + 分区表 + 应用 | `0x0` |
-| `CardRadio-1.0.bin` | 仅应用分区，已有正确 bootloader 时使用 | `0x10000` |
-| `cardradio-1.0.patch` | 与 app bin 相同，供 OTA / 增量工具使用 | — |
+| `cardradio-1.1-merged.bin` | **推荐**。完整镜像，含 bootloader + 分区表 + 应用 | `0x0` |
+| `CardRadio-1.1.bin` | 仅应用分区，已有正确 bootloader 时使用 | `0x10000` |
+| `cardradio-1.1.patch` | 与 app bin 相同，供 OTA / 增量工具使用 | — |
 
 **esptool 命令行**（把 `COM5` 换成实际串口）：
 
 ```bash
-esptool.py --chip esp32s3 -p COM5 -b 460800 write_flash 0x0 cardradio-1.0-merged.bin
+esptool.py --chip esp32s3 -p COM5 -b 460800 write_flash 0x0 cardradio-1.1-merged.bin
 ```
 
-**M5Stack 官方烧录工具 / 网页烧录器**：选择「ESP32-S3」，偏移 `0x0`，载入 `cardradio-1.0-merged.bin`，按提示让设备进入下载模式。
+**M5Stack 官方烧录工具 / 网页烧录器**：选择「ESP32-S3」，偏移 `0x0`，载入 `cardradio-1.1-merged.bin`，按提示让设备进入下载模式。
 
 首次开机若提示「没有 microSD 卡」，插入 FAT32 / exFAT 卡后重新上电即可（播放本地音乐必需，只听网络电台也需要挂载成功才会进入主界面）。
 
@@ -138,6 +139,7 @@ esptool.py --chip esp32s3 -p COM5 -b 460800 write_flash 0x0 cardradio-1.0-merged
 | `I` | 运行状态页（内存 / WiFi / 运行时间） |
 | `B` | 亮度切换（4 档） |
 | `D` | 立即熄屏 |
+| `T` | 定时关闭：选 15 / 30 / 45 / 60 / 90 / 120 / 150 分钟，到期自动停止播放、断开 WiFi 并进入深度睡眠（按侧键 G0 唤醒，唤醒后回到主界面） |
 | `G0`（侧面按钮） | 播放 / 暂停，同时唤醒屏幕 |
 
 ### 主界面

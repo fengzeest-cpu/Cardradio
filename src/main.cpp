@@ -1,4 +1,4 @@
-// CardRadio v1.0 — MP3 player + internet radio for the M5Stack Cardputer ADV
+// CardRadio v1.1 — MP3 player + internet radio for the M5Stack Cardputer ADV
 //
 // Plays .mp3 files from the microSD card through the speaker or headphone
 // jack, with a folder browser, shuffle/repeat, seeking and a 3-band EQ.
@@ -11,6 +11,8 @@
 #include <vector>
 #include <esp_heap_caps.h>
 #include <esp32-hal-psram.h>
+#include <esp_sleep.h>
+#include <WiFi.h>
 
 #include "Library.h"
 #include "Player.h"
@@ -55,7 +57,8 @@ enum class Screen : uint8_t
   Equalizer, Help,              // 均衡器 / 快捷键总览
   Status,                       // 运行状态（按 I）：剩余内存等
   RadioMenu, RadioStations, RadioSearch,  // 网络电台：分类页 / 台列表 / 搜索
-  WifiList, WifiPass            // 配网
+  WifiList, WifiPass,           // 配网
+  SleepTimer                    // 定时关闭（T）
 };
 static Screen screen = Screen::Home;
 static Screen helpBack = Screen::Home;   // 帮助页从哪来、关掉回哪去
@@ -434,7 +437,7 @@ static void drawPill(int& xr, const char* label, uint16_t fg, uint16_t bgc)
   xr -= 3;
 }
 
-static void drawHeader(const char* title)
+static void drawHeader(const char* title, bool showModes = true)
 {
   cv.fillRect(0, 0, W, 14, col::panel);
   String t(title);
@@ -473,8 +476,9 @@ static void drawHeader(const char* title)
     cv.fillTriangle(xr - 7, 7, xr - 3, 2, xr - 3, 12, c);
     xr -= 14;
   }
-  // modes
-  if (info.radio)
+  // modes. Skippable: on Help the "H / ESC 关闭" label reaches into this area
+  // and collided with the "直播" pill whenever a station was playing.
+  if (showModes && info.radio)
   {
     drawPill(xr, "直播", col::bg, col::accent);
   }
@@ -988,7 +992,7 @@ static void homeCard(int y, bool sel, bool radio)
 
 static void drawHome()
 {
-  drawHeader("CardRadio v1.0");
+  drawHeader("CardRadio v1.1");
   homeCard(18, homeSel == 0, false);
   homeCard(64, homeSel == 1, true);
   drawHint("上下选择　ENT 进入　W WiFi");
@@ -1014,6 +1018,59 @@ static Screen wifiBack = Screen::RadioMenu;
 
 // Raw key edges for password entry (declared here so beginConnect can reset them).
 static std::bitset<128> prevRawChars;
+
+// ---------------------------------------------------------------------------
+// Sleep timer (T): stop playback and cut power at a chosen minute mark.
+// Only the deep-sleep variant exists: stopping alone keeps WiFi's modem at
+// full draw (streaming needs WiFi.setSleep(false)) and a battery would not
+// survive the night. Waking from deep sleep is a full reboot — everything
+// worth keeping already lives in NVS.
+static Screen timerBack = Screen::NowPlaying;       // where T was pressed
+static const uint16_t kSleepOpts[] = { 15, 30, 45, 60, 90, 120, 150 };  // minutes
+static uint16_t sleepMins = 0;                      // 0 = timer off
+static uint32_t sleepDue  = 0;                      // millis() stamp, signed compare
+static int      sleepSel  = 0;                      // cursor on the timer page
+
+static void setSleepTimer(uint16_t mins)
+{
+  sleepMins = mins;
+  sleepDue  = mins ? millis() + mins * 60000UL : 0;
+  markDirty();
+}
+
+// "MM:SS" left until shutdown, or "" when the timer is off.
+static String sleepRemaining()
+{
+  if (!sleepMins) return String();
+  int32_t left = (int32_t)(sleepDue - millis());
+  if (left < 0) left = 0;
+  char b[10];
+  snprintf(b, sizeof(b), "%02d:%02d", (int)(left / 60000), (int)((left % 60000) / 1000));
+  return String(b);
+}
+
+// Timer fired: stop everything and hand the board to deep sleep. G0 (GPIO0,
+// the side button, RTC-capable and active-low) is the only wake source.
+// esp_deep_sleep_start() never returns; the reboot it eventually performs
+// boots straight into setup().
+static void doSleepShutdown()
+{
+  saveResume();
+  player.stop();
+  setSleepTimer(0);
+  saveSettings();
+
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_OFF);
+  M5.Display.setBrightness(0);
+
+  cv.fillScreen(col::bg);
+  drawCentered("睡眠关机", "按 G0 键唤醒");
+  delay(1800);                       // let whoever is still looking read it
+
+  esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0);
+  esp_deep_sleep_start();            // never returns
+}
 static bool prevEnter = false, prevBksp = false, prevEsc = false;
 
 static void drawWifiList()
@@ -1382,11 +1439,21 @@ static void drawNowPlayingRadio()
   cv.drawString(el, 8, 107);
 
   cv.setTextDatum(top_right);
-  String fmt = String(info.codec ? "AAC " : "MP3 ") + info.bitrate + "k";
-  uint32_t sr = player.output().rate();
-  if (sr) fmt += String(" · ") + String(sr / 1000.0f, 1) + "k";
-  useFace(fmt, &fonts::DejaVu9, true);
-  cv.drawString(fmt, 232, 107);
+  if (sleepMins)                          // sleep timer countdown takes the slot
+  {
+    String left = String("关 ") + sleepRemaining();
+    useFace(left, &fonts::DejaVu9, true);
+    cv.setTextColor(col::warn);
+    cv.drawString(left, 232, 107);
+  }
+  else
+  {
+    String fmt = String(info.codec ? "AAC " : "MP3 ") + info.bitrate + "k";
+    uint32_t sr = player.output().rate();
+    if (sr) fmt += String(" · ") + String(sr / 1000.0f, 1) + "k";
+    useFace(fmt, &fonts::DejaVu9, true);
+    cv.drawString(fmt, 232, 107);
+  }
 
   drawHint("L 音乐库　N/P 切台　H 帮助　I 状态");
 }
@@ -1506,22 +1573,60 @@ static int eqSel = 0;
 // only names the few keys that fit there; H shows the whole map. H or ESC
 // closes it and returns to wherever it was opened from.
 // ---------------------------------------------------------------------------
+// -- 定时关闭页：取消 / 15-150 分钟档位，首行顺带显示当前剩余 ----------------
+static void drawSleepTimer()
+{
+  drawHeader("定时关闭");
+
+  const int n = 1 + (int)(sizeof(kSleepOpts) / sizeof(kSleepOpts[0]));
+  const int vis = kRows;                              // 5 rows, like every list
+  int top = sleepSel >= vis ? sleepSel - (vis - 1) : 0;
+
+  for (int i = top; i < n && i < top + vis; ++i)
+  {
+    int y = kListY + (i - top) * kRowH;
+    bool cur = (i == sleepSel);
+    if (cur) cv.fillRoundRect(2, y, 230, kRowH - 1, 3, col::panel2);
+    cv.setTextDatum(middle_left);
+    cv.setTextColor(cur ? col::text : col::dim);
+    String label = (i == 0) ? String("关闭倒计时")
+                            : String(kSleepOpts[i - 1]) + " 分钟";
+    useFace(label, kFaceSmall);
+    cv.drawString(label, 12, y + kRowH / 2);
+
+    if (i == 0 && sleepMins)                          // active timer on row 0
+    {
+      cv.setTextDatum(middle_right);
+      cv.setTextColor(col::warn);
+      String left = sleepRemaining() + " 后关机";
+      useFace(left, kFaceSmall);
+      cv.drawString(left, 226, y + kRowH / 2);
+    }
+  }
+  if (n - top > vis) scrollBar(n, top);
+  drawHint("ENT 确认　BKSP 返回");
+}
+
 static void drawHelp()
 {
-  drawHeader("快捷键");
+  // No mode pills: header already carries the "H / ESC 关闭" label, which
+  // collided with the "直播" pill while a station was streaming.
+  drawHeader("快捷键", false);
 
+  // Header mini-labels are 14 px efont when they contain CJK — two of them
+  // collided with each other and with the battery cluster, so only one is
+  // kept; "I" moved into the table itself.
   cv.setTextDatum(middle_left);
   cv.setTextColor(col::dim);
   cv.setFont(kFaceSmall);
   cv.drawString("H / ESC 关闭", 54, 7);
-  cv.drawString("I 状态页", 124, 7);
 
-  cv.drawFastVLine(118, 16, 112, col::panel2);
+  cv.drawFastVLine(120, 16, 112, col::panel2);
 
   static const char* lKey[]  = { "空格", "N/P", "左/右", "上/下", "F", "E", "R", "S" };
   static const char* lText[] = { "播放/暂停", "切歌", "快退/快进", "音量", "文件夹", "均衡器", "循环模式", "随机播放" };
-  static const char* rKey[]  = { "M", "O", "L", "TAB", "ENT", "BKSP", "ESC", "W/B" };
-  static const char* rText[] = { "静音", "电台", "音乐库", "主界面", "播放/暂停", "上一级", "返回/主页", "配网/亮度" };
+  static const char* rKey[]  = { "M", "O", "L", "TAB", "BKSP", "I", "T", "W/B" };
+  static const char* rText[] = { "静音", "电台", "音乐库", "主界面", "上一级", "状态页", "定时关机", "配网/亮度" };
 
   cv.setFont(kFaceSmall);
   for (int i = 0; i < 8; ++i)
@@ -1569,7 +1674,7 @@ static void drawStatus()
 
   char b[40];
   struct Row { const char* k; String v; };
-  Row rows[8];
+  Row rows[9];
   int n = 0;
 
   snprintf(b, sizeof(b), "%u KB", (unsigned)(heap / 1024));
@@ -1607,14 +1712,26 @@ static void drawStatus()
   }
 
   // Always shown, even when the total is zero: the point of this line is to
-  // show whether PSRAM can be allocated at all.
-  snprintf(b, sizeof(b), "%u MB %s", (unsigned)(psTot / (1024 * 1024)),
-           psUsable ? "可用" : (psramReady ? "不可用" : "未启用"));
-  rows[n].k = "PSRAM"; rows[n].v = b; ++n;
+  // show whether PSRAM can be allocated at all. Skipped while the sleep
+  // timer is running: with the decoder buffers listed too, 9 rows would
+  // overflow the 135 px tall panel.
+  if (!sleepMins)
+  {
+    snprintf(b, sizeof(b), "%u MB %s", (unsigned)(psTot / (1024 * 1024)),
+             psUsable ? "可用" : (psramReady ? "不可用" : "未启用"));
+    rows[n].k = "PSRAM"; rows[n].v = b; ++n;
+  }
 
   rows[n].k = "WiFi";
   rows[n].v = net::connected() ? String(net::ssid()) : String("未连接");
   ++n;
+
+  if (sleepMins)
+  {
+    rows[n].k = "定时关闭";
+    rows[n].v = sleepRemaining() + " 后关机";
+    ++n;
+  }
 
   int y = 18;
   for (int i = 0; i < n; ++i)
@@ -1753,6 +1870,7 @@ static void render()
     case Screen::RadioSearch:   drawRadioSearch(); break;
     case Screen::WifiList:      drawWifiList(); break;
     case Screen::WifiPass:      drawWifiPass(); break;
+    case Screen::SleepTimer:    drawSleepTimer(); break;
   }
   drawToast();
   cv.pushSprite(0, 0);
@@ -1906,6 +2024,12 @@ static void onKey(uint8_t k, bool rep)
       toast("亮度", kBrightness[cfg.brightness] * 100 / 255, 900);
       markDirty();
       return;
+    case 't':                              // sleep timer page, from anywhere
+      if (rep || screen == Screen::SleepTimer) return;
+      timerBack = screen;
+      sleepSel  = sleepMins ? 1 : 0;       // cursor: first duration when off
+      screen    = Screen::SleepTimer;
+      return;
   }
 
   // ---- per screen ----
@@ -1966,6 +2090,30 @@ static void onKey(uint8_t k, bool rep)
         break;
       case K_BKSP:
       case K_ESC:   if (!rep) screen = Screen::Home; break;
+    }
+  }
+  else if (screen == Screen::SleepTimer)
+  {
+    const int n = 1 + (int)(sizeof(kSleepOpts) / sizeof(kSleepOpts[0]));
+    switch (k)
+    {
+      case K_UP:   if (sleepSel > 0)     --sleepSel; break;
+      case K_DOWN: if (sleepSel < n - 1) ++sleepSel; break;
+      case K_ENTER:
+        if (rep) break;
+        if (sleepSel == 0)
+        {
+          if (sleepMins) { setSleepTimer(0); toast("已取消定时"); }
+        }
+        else
+        {
+          setSleepTimer(kSleepOpts[sleepSel - 1]);
+          toast(String("定时 ") + kSleepOpts[sleepSel - 1] + " 分钟 · 到期睡眠关机", -1, 1600);
+        }
+        screen = timerBack;
+        break;
+      case K_BKSP:
+      case K_ESC:  if (!rep) screen = timerBack; break;
     }
   }
   else if (screen == Screen::Equalizer)
@@ -2250,7 +2398,7 @@ static void splash(const char* a, const char* b)
   cv.setFont(&fonts::FreeSansBold9pt7b);
   cv.setTextDatum(middle_center);
   cv.setTextColor(col::accent);
-  cv.drawString("CardRadio v1.0", W / 2, 34);
+  cv.drawString("CardRadio v1.1", W / 2, 34);
   drawCentered(a, b, 70);
   cv.pushSprite(0, 0);
 }
@@ -2363,6 +2511,9 @@ void loop()
   if (now - lastBatt > 5000) { lastBatt = now; batteryLevel = M5.Power.getBatteryLevel(); }
 
   if (saveDue && (int32_t)(now - saveDue) >= 0) { saveDue = 0; saveSettings(); }
+
+  // Sleep timer fired: stop playback, drop WiFi, deep sleep. Never returns.
+  if (sleepDue && (int32_t)(now - sleepDue) >= 0) doSleepShutdown();
 
   static uint32_t lastDraw = 0;
   if (screenOn && now - lastDraw >= 40) { lastDraw = now; render(); }
