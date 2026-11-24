@@ -25,7 +25,7 @@ env = DefaultEnvironment()
 # in other files and are not touched. Japanese, Korean and Traditional
 # Chinese are not shown at all.
 KEEP = {
-    "lgfx_efont_cn.c": {"lgfx_efont_cn_12", "lgfx_efont_cn_16"},
+    "lgfx_efont_cn.c": {"lgfx_efont_cn_12", "lgfx_efont_cn_14", "lgfx_efont_cn_16"},
     "lgfx_efont_ja.c": set(),
     "lgfx_efont_kr.c": set(),
     "lgfx_efont_tw.c": set(),

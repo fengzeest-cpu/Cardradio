@@ -362,7 +362,10 @@ static bool listDir(const String& path, std::vector<LibEntry>& out, bool& trunc)
 // entirely in one face, so anything that may hold Chinese is drawn with the
 // efont face and everything else keeps the smaller DejaVu one.
 static const lgfx::IFont* const kFaceBody  = &fonts::efontCN_16;   // names, titles
-static const lgfx::IFont* const kFaceSmall = &fonts::efontCN_12;   // chrome, hints
+static const lgfx::IFont* const kFaceSmall = &fonts::efontCN_14;   // chrome, hints
+// 12 px CJK was tried here first: the strokes of that bitmap size smear on
+// this panel and every hint line read fuzzy. 14 px costs the same flash and
+// is markedly cleaner; the few layouts below were re-spaced to match.
 
 static bool hasWide(const String& s)
 {
@@ -1521,7 +1524,7 @@ static void drawHelp()
   cv.setFont(kFaceSmall);
   for (int i = 0; i < 8; ++i)
   {
-    int y = 18 + i * 14;
+    int y = 16 + i * 15;                 // 14 px font: 15 px pitch, 8 rows fill the screen
     cv.setTextDatum(top_right);
     cv.setTextColor(col::text);
     cv.drawString(lKey[i], 52, y);
@@ -1626,7 +1629,7 @@ static void drawStatus()
     useFace(rows[i].v, &fonts::DejaVu12);
     cv.setTextColor(c);
     cv.drawString(rows[i].v, 232, y);
-    y += 14;
+    y += 15;                     // 14 px font needs more than 14 px of pitch
   }
 }
 
