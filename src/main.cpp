@@ -361,11 +361,13 @@ static bool listDir(const String& path, std::vector<LibEntry>& out, bool& trunc)
 // covers all of GB2312) and the Latin-only DejaVu faces. A string is drawn
 // entirely in one face, so anything that may hold Chinese is drawn with the
 // efont face and everything else keeps the smaller DejaVu one.
-static const lgfx::IFont* const kFaceBody  = &fonts::efontCN_16;   // names, titles
+// efont is a bitmap family generated on a 16x16 grid; the 10/12/14 px sizes
+// are that grid with pixels knocked out, so their strokes never look crisp on
+// this panel. 14 px was picked over 12 (same cost, visibly cleaner) and over
+// 16 (the sharpest, but it crowds every list on a 135 px tall screen — the
+// layout rework it forces was judged not worth it).
 static const lgfx::IFont* const kFaceSmall = &fonts::efontCN_14;   // chrome, hints
-// 12 px CJK was tried here first: the strokes of that bitmap size smear on
-// this panel and every hint line read fuzzy. 14 px costs the same flash and
-// is markedly cleaner; the few layouts below were re-spaced to match.
+static const lgfx::IFont* const kFaceBody  = &fonts::efontCN_16;   // names, titles
 
 static bool hasWide(const String& s)
 {
