@@ -1,4 +1,4 @@
-# CardRadio — Cardputer ADV 音乐 + 网络电台播放器
+# CardRadioPlayer — Cardputer ADV 音乐 + 网络电台播放器
 
 M5Stack Cardputer ADV 上的 MP3 播放器与中文网络电台，一套固件两种玩法：
 
@@ -232,53 +232,6 @@ esptool.py --chip esp32s3 -p COM5 -b 460800 write_flash 0x0 cardradio-1.1-merged
 
 ---
 
-## 运行状态页（`I`）
-
-只有这一页显示内存细节，排查卡顿 / 崩溃时很有用：
-
-| 字段 | 含义 |
-|---|---|
-| 内部剩余 | 当前内部 RAM 空闲量 |
-| 内部最低 | 开机以来最低水位 |
-| 最大连续块 | 单次能分配的最大块（碎片指标） |
-| 显示缓冲 | 240×135 帧缓冲大小及所在位置（内部 / PSRAM） |
-| 解码缓冲 | libmad 工作区大小与位置 |
-| 取流缓冲 | 网络电台环形缓冲大小与位置 |
-| PSRAM | 容量与是否真的可分配（本机 0 MB 未启用） |
-| WiFi / 运行时间 | 当前网络名与开机时长 |
-
----
-
-## 电台数据与维护
-
-- 电台表在 `src/Stations.h`，按分组定义为静态常量数组，不占 RAM。
-- 拼音索引在 `src/StationsPinyin.h`，由脚本从 `Stations.h` 自动生成（全拼 + 首字母，仅 ASCII）。
-- 增删或移动电台后执行：
-
-```bash
-python3 tools/gen_station_pinyin.py
-```
-
-- 电台来源为蜻蜓 FM 公开直连流（`lhttp.qtfm.cn/live/<id>/64k.mp3`），清单在编译前逐条实测，仅收录实测可播的台。电台流由第三方提供，存在失效可能。
-
----
-
-## 从源码编译
-
-需要 [PlatformIO](https://platformio.org/)（VS Code 插件或 CLI 均可）。
-
-```bash
-git clone <本仓库地址>
-cd cardradio
-pio run                       # 编译
-pio run -t upload             # 编译并烧录
-```
-
-- 分区表固定为 `default_8MB.csv`（8 MB Flash，双 OTA + 1.5 MB SPIFFS）。
-- 首次编译会拉取 ESP32 Arduino 3.x 框架与 M5GFX，耗时较长。
-- `tools/pio_m5gfx_font_trim.py` 是 PlatformIO 预编译钩子，会把 M5GFX 里未使用的 78 个 CJK 字库替换为占位符，明显缩短编译时间，不影响功能，固件体积也不变（字库本就在 flash，按需取用）。
-- 编译产物：`firmware.bin`（应用）、`firmware.factory.bin`（合并镜像）。
-
 主要源码：
 
 ```
@@ -296,16 +249,6 @@ tools/
   gen_station_pinyin.py     电台拼音索引生成
   pio_m5gfx_font_trim.py    M5GFX 字库裁剪钩子
 ```
-
----
-
-## 已知限制
-
-- **仅支持本地 MP3**。AAC / AAC-ADTS / HLS 音频在实测中表现不稳定，已从电台表移除；`HlsSource` 代码保留但当前无对应电台。
-- 电台与本地音乐不能同时播放，切换时会释放当前解码资源。
-- 网络电台首次连接约需 1～3 秒缓冲，信号弱时可能自动重连。
-- Cardputer ADV 无 PSRAM，所有缓冲都在内部 RAM 中，内存紧张时可用状态页判断。
-- Cardputer ADV 扬声器为单声道，立体声文件会下混。
 
 ---
 
