@@ -62,17 +62,17 @@ M5Stack Cardputer ADV 上的 MP3 播放器与网络电台，一套固件两种�
 
 | 文件 | 用途 | 烧录地址 |
 |---|---|---|
-| `cardradio-1.1-merged.bin` | **推荐**。完整镜像，含 bootloader + 分区表 + 应用 | `0x0` |
-| `CardRadio-1.1.bin` | 仅应用分区，已有正确 bootloader 时使用 | `0x10000` |
-| `cardradio-1.1.patch` | 与 app bin 相同，供 OTA / 增量工具使用 | — |
+| `cardradio-1.2-merged.bin` | **推荐**。完整镜像，含 bootloader + 分区表 + 应用 | `0x0` |
+| `CardRadio-1.2.bin` | 仅应用分区，已有正确 bootloader 时使用 | `0x10000` |
+| `cardradio-1.2.patch` | 与 app bin 相同，供 OTA / 增量工具使用 | — |
 
 **esptool 命令行**（把 `COM5` 换成实际串口）：
 
 ```bash
-esptool.py --chip esp32s3 -p COM5 -b 460800 write_flash 0x0 cardradio-1.1-merged.bin
+esptool.py --chip esp32s3 -p COM5 -b 460800 write_flash 0x0 cardradio-1.2-merged.bin
 ```
 
-**M5Stack 官方烧录工具 / 网页烧录器**：选择「ESP32-S3」，偏移 `0x0`，载入 `cardradio-1.1-merged.bin`，按提示让设备进入下载模式。
+**M5Stack 官方烧录工具 / 网页烧录器**：选择「ESP32-S3」，偏移 `0x0`，载入 `cardradio-1.2-merged.bin`，按提示让设备进入下载模式。
 
 首次开机若提示「没有 microSD 卡」，插入 FAT32 / exFAT 卡后重新上电即可（播放本地音乐必需，只听网络电台也需要挂载成功才会进入主界面）。
 

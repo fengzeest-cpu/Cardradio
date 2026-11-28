@@ -1,4 +1,4 @@
-// CardRadio v1.1 — MP3 player + internet radio for the M5Stack Cardputer ADV
+// CardRadio v1.2 — MP3 player + internet radio for the M5Stack Cardputer ADV
 //
 // Plays .mp3 files from the microSD card through the speaker or headphone
 // jack, with a folder browser, shuffle/repeat, seeking and a 3-band EQ.
@@ -992,7 +992,7 @@ static void homeCard(int y, bool sel, bool radio)
 
 static void drawHome()
 {
-  drawHeader("CardRadio v1.1");
+  drawHeader("CardRadio v1.2");
   homeCard(18, homeSel == 0, false);
   homeCard(64, homeSel == 1, true);
   drawHint("上下选择　ENT 进入　W WiFi");
@@ -2398,7 +2398,7 @@ static void splash(const char* a, const char* b)
   cv.setFont(&fonts::FreeSansBold9pt7b);
   cv.setTextDatum(middle_center);
   cv.setTextColor(col::accent);
-  cv.drawString("CardRadio v1.1", W / 2, 34);
+  cv.drawString("CardRadio v1.2", W / 2, 34);
   drawCentered(a, b, 70);
   cv.pushSprite(0, 0);
 }
